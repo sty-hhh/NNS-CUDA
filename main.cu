@@ -3,37 +3,40 @@
 #include <math.h>
 #include "core.cu"
 
-const double DOUBLE_RAND_MAX = double(RAND_MAX);
-
+// CUDA通用函数声明
 void (*func)(int, int, int, float*, float*, int**);
 
-float getRandNum() {
-    return rand() / DOUBLE_RAND_MAX;
-}
-
-void getSample(int k, int m, int n, float **s_points, float **r_points) {
-    float *tmp;
-    tmp = (float*)malloc(sizeof(float) * k * m);
-    for (int i = 0; i < k * m; i++) 
-        tmp[i] = getRandNum();
-    *s_points = tmp;
-    tmp = (float*)malloc(sizeof(float) * k * n);
-    for (int i = 0; i < k * n; i++) 
-        tmp[i] = getRandNum();
-    *r_points = tmp;
-}
-
-float calcDistance(int k, int mInd, int nInd, float *s_points, float *r_points) {
+// 计算两点间的距离
+float cal_distance(int k, int idm, int idn, float *s_points, float *r_points) {
     float squareSum = 0;
     float diff;
     for (int i = 0; i < k; i++) {
-        diff = s_points[k*mInd+i] - r_points[k*nInd+i];
+        diff = s_points[k*idm+i] - r_points[k*idn+i];
         squareSum += (diff * diff);
     }
     return sqrt(squareSum);
 }
 
-int samplesConfig[] = {
+// 生成随机数
+float getRand() {
+    return rand() / double(RAND_MAX);
+}
+
+// 生成随机样例
+void getSample(int k, int m, int n, float **s_points, float **r_points) {
+    float *tmp;
+    tmp = (float*)malloc(sizeof(float) * k * m);
+    for (int i = 0; i < k * m; i++) 
+        tmp[i] = getRand();
+    *s_points = tmp;
+    tmp = (float*)malloc(sizeof(float) * k * n);
+    for (int i = 0; i < k * n; i++) 
+        tmp[i] = getRand();
+    *r_points = tmp;
+}
+
+// 样例设置
+int samples[] = {
     3,  1,      1024,
     3,  1,      65536,
     16, 1,      65536,
@@ -49,56 +52,32 @@ int samplesConfig[] = {
     16, 1024,   1048576
 };
 
-int numSamples = 0;
-int seed = 1000;
-long st, et;
-// int **baselineResults = NULL;
+int total = 0;      // 样例个数
+int seed = 1000;    // 随机种子
+long st, et;        // 开始和结束的时间
 
+// 样例测试
 void test(int v) {
     srand(seed);
-    for (int i = 0; i < numSamples; ++i) {
-        int k = samplesConfig[3*i];
-        int m = samplesConfig[3*i+1];
-        int n = samplesConfig[3*i+2];
+    for (int i = 0; i < total; ++i) {
+        int k = samples[3*i];
+        int m = samples[3*i+1];
+        int n = samples[3*i+2];
         float *s_points, *r_points;
         getSample(k, m, n, &s_points, &r_points);
-        
-        
         int *results;
         st = getTime();
         (*func)(k, m, n, s_points, r_points, &results);
         et = getTime();
         printf("CudaCall %d, %2d, %4d, %5d, %10.3fms\n", v, k, m, n, (et - st) / 1e6);
-
-        // if (baselineResults[i] == NULL) 
-        //         baselineResults[i] = results;
-        // else { 
-        //     int errors = 0;
-        //     for (int j = 0; j < m; j++) {
-        //         if (baselineResults[i][j] == results[j]) 
-        //             continue;
-        //         else {
-        //             float d1 = calcDistance(k, j, baselineResults[i][j], s_points, r_points);
-        //             float d2 = calcDistance(k, j, results[j], s_points, r_points);
-        //             if (d1 - d2 < -1e-3 || d1 - d2 > 1e-3) 
-        //                 errors++;
-        //         }
-        //     }
-        //     printf("errors/total w.r.t. baseline: %d/%d\n\n", errors, m);
-        //     free(results);
-        // }
-
-        // De-allocate the memory spaces.
         free(s_points);
         free(r_points);
     }
 }
 
 int main() {
-    numSamples = sizeof(samplesConfig) / (3 * sizeof(*samplesConfig));
-    // baselineResults = (int **)malloc(sizeof(int *) * numSamples);
-    // for (int i = 0; i < numSamples; i++) 
-    //     baselineResults[i] = NULL;
+    total = sizeof(samples) / (3 * sizeof(*samples));   // 样例个数
+    // 运行全部的优化版本
     for (int v = 1; v < 11; ++v) {
         switch (v) {
             case 0:
@@ -138,10 +117,4 @@ int main() {
         printf("\nRunning CUDACALL%d...\n", v);
         test(v);
     } 
-    
-    // if (baselineResults != NULL) {
-    //     for (int i = 0; i < numSamples; i++) 
-    //         free(baselineResults[i]);
-    //     free(baselineResults);
-    // }
 }
