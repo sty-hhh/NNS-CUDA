@@ -7,7 +7,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 
-int tenmp=0;
+int temp=0;
 
 // CPU 串行版本
 namespace v0
