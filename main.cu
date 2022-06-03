@@ -5,6 +5,8 @@
 
 const double DOUBLE_RAND_MAX = double(RAND_MAX);
 
+void (*func)(int, int, int, float*, float*, int**);
+
 float getRandNum() {
     return rand() / DOUBLE_RAND_MAX;
 }
@@ -21,10 +23,6 @@ void getSample(int k, int m, int n, float **s_points, float **r_points) {
     *r_points = tmp;
 }
 
-// func is a function pointer which is compatible with "cudaCall"s.
-void (*func)(int, int, int, float*, float*, int**);
-
-// calcDistance is for calculating the precise Euclidean distance.
 float calcDistance(int k, int mInd, int nInd, float *s_points, float *r_points) {
     float squareSum = 0;
     float diff;
@@ -36,9 +34,6 @@ float calcDistance(int k, int mInd, int nInd, float *s_points, float *r_points) 
 }
 
 int samplesConfig[] = {
-    3,  1,      2,
-    3,  2,      8,
-
     3,  1,      1024,
     3,  1,      65536,
     16, 1,      65536,
@@ -46,6 +41,12 @@ int samplesConfig[] = {
     3,  1024,   1024,
     3,  1024,   65536,
     16, 1024,   65536,
+
+    3,  1,      16777216,
+    16, 1,      16777216,
+
+    3,  1024,   1048576,
+    16, 1024,   1048576
 };
 
 int numSamples = 0;
