@@ -176,7 +176,7 @@ namespace v2
 			*results = (int *)malloc(sizeof(int) * m));
 	}
 }; 
-// GPU：计算距离并同时规约
+// GPU：计算距离并同时归约
 namespace v3
 {
 	template <int BLOCK_DIM>

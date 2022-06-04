@@ -6,17 +6,6 @@
 // CUDA通用函数声明
 void (*func)(int, int, int, float*, float*, int**);
 
-// 计算两点间的距离
-float cal_distance(int k, int idm, int idn, float *s_points, float *r_points) {
-    float squareSum = 0;
-    float diff;
-    for (int i = 0; i < k; i++) {
-        diff = s_points[k*idm+i] - r_points[k*idn+i];
-        squareSum += (diff * diff);
-    }
-    return sqrt(squareSum);
-}
-
 // 生成随机数
 float getRand() {
     return rand() / double(RAND_MAX);
