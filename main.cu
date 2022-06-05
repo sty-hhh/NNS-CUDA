@@ -55,6 +55,7 @@ void test(int v) {
     }
 }
 
+// 主函数
 int main() {
     total = sizeof(samples) / (3 * sizeof(*samples));   // 样例个数
     // 运行全部的优化版本
