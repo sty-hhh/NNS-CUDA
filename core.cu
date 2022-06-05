@@ -415,13 +415,16 @@ namespace v5 {
 			texObj,
 			thrust::raw_pointer_cast(results_d.data()));
 
+		// 销毁纹理对象
+		CHECK(cudaDestroyTextureObject(texObj));
+
 		thrust::copy(
 			results_d.begin(),
 			results_d.end(),
 			*results = (int *)malloc(sizeof(int) * m));
 	}
 }; 
-// GPU：使用纹理内存存储转置参考点集
+// GPU：使用常量内存存储转置参考点集
 namespace v6 {
 	static __constant__ float const_mem[(64 << 10) / sizeof(float)];	// 常量内存最大限制
 	static __global__ void mat_inv_kernel(	// 矩阵转置
@@ -698,11 +701,11 @@ namespace v8
 			return v0::cudaCall(k, m, n, s_points, r_points, results);
 		if (n <= thrust::min(1 << 18, m << 10))
 			return v7::cudaCall(k, m, n, s_points, r_points, results);
-        #pragma omp parallel num_threads(num_gpus) 
+        #pragma omp parallel num_threads(num_gpus) 	// 多卡并行
 		{
 			int thread_num = omp_get_thread_num();
 			int thread_n = divup(n, num_gpus);
-			float *thread_r_points = r_points + thread_num * thread_n * k;
+			float *thread_r_points = r_points + thread_num * thread_n * k;	// 为每张显卡分配定量的参考点集
 			if (thread_num == num_gpus - 1) {
 				thread_n = n - thread_num * thread_n;
 				if (thread_n == 0) {
@@ -710,7 +713,7 @@ namespace v8
 					thread_r_points -= k;
 				}	
 			}
-			CHECK(cudaSetDevice(thread_num));
+			CHECK(cudaSetDevice(thread_num));	// 选择对应的显卡
 			thrust::device_vector<float> s_d(s_points, s_points + k * m);
 			thrust::device_vector<float> r_d(thread_r_points, thread_r_points + k * thread_n);
 			thrust::device_vector<float> rr_d(k * thread_n);
@@ -739,19 +742,18 @@ namespace v8
 				thrust::raw_pointer_cast(results_d.data()));
 			
 			int my_beg, my_end;
-            #pragma omp critical 
+            #pragma omp critical 	// 临界区将多卡结果合并
 			{
 				my_beg = results_tmp.size();
 				results_tmp.insert(results_tmp.end(), results_d.begin(), results_d.end());
 				my_end = results_tmp.size();
 			}
-            #pragma omp barrier
+            #pragma omp barrier		// 多卡同步
 			for (int offset = (thread_r_points - r_points) / k; my_beg < my_end; ++my_beg)
-					results_tmp[my_beg] += offset;
-			
+					results_tmp[my_beg] += offset;	// 将每张卡上的参考点index转为全局index
 		}
 		*results = (int *)malloc(sizeof(int) * m);
-		for (int idm = 0; idm < m; ++idm) {
+		for (int idm = 0; idm < m; ++idm) {	// CPU端归约查找最近邻点
             float minSum = INFINITY;
 			int index = 0;
 			for (int i = 0; i < results_tmp.size(); i += m) {

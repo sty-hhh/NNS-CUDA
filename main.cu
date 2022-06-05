@@ -26,17 +26,8 @@ void getSample(int k, int m, int n, float **s_points, float **r_points) {
 
 // 样例设置
 int samples[] = {
-    3,  1,      1024,
-    3,  1,      65536,
-    16, 1,      65536,
-
-    3,  1024,   1024,
-    3,  1024,   65536,
-    16, 1024,   65536,
-
     3,  1,      16777216,
     16, 1,      16777216,
-
     3,  1024,   1048576,
     16, 1024,   1048576
 };
@@ -67,7 +58,7 @@ void test(int v) {
 int main() {
     total = sizeof(samples) / (3 * sizeof(*samples));   // 样例个数
     // 运行全部的优化版本
-    for (int v = 1; v < 11; ++v) {
+    for (int v = 0; v < 11; ++v) {
         switch (v) {
             case 0:
                 func = & v0::cudaCall;
