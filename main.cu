@@ -59,7 +59,7 @@ void test(int v) {
 int main() {
     total = sizeof(samples) / (3 * sizeof(*samples));   // 样例个数
     // 运行全部的优化版本
-    for (int v = 0; v < 11; ++v) {
+    for (int v = 0; v < 10; ++v) {
         switch (v) {
             case 0:
                 func = & v0::cudaCall;
@@ -91,9 +91,9 @@ int main() {
             case 9:
                 func = & v9::cudaCall;
                 break;
-            case 10:
-                func = & v10::cudaCall;
-                break;
+            // case 10:
+            //     func = & v10::cudaCall;
+            //     break;
         }
         printf("\nRunning CUDACALL%d...\n", v);
         test(v);
