@@ -1273,6 +1273,182 @@ namespace v9
 // 	}
 // } // namespace v10
 
+namespace v11
+{
+    int k;
+    float *r_points, *s_points;
+    struct Node
+    {
+        std::vector<int> incl;     // 包含哪些点集
+        float x_c, y_c, z_c;       // 八角树划分中心
+        float radius;              // 半径
+        int pos;                   // 标号 0 表示全部大于中心，1 表示 x小于，2 表示y小于，3表示xy小于，4表示z小于……-1表示没有
+        std::vector<Node> subtree; // 子树
+        int depth;                 // 表示深度
+        Node(float x, float y, float z, float r, int position = -1)
+        {
+            x_c = x;
+            y_c = y;
+            z_c = z;
+            radius = r;
+            pos = position;
+        }
+        Node &operator=(const Node &o)
+        {
+            x_c = o.x_c;
+            y_c = o.y_c;
+            z_c = o.z_c;
+            pos = o.pos;
+            incl = o.incl;
+            subtree = o.subtree;
+			return *this;
+        }
+        Node() { depth = 0; }
+        Node(int dep)
+        {
+            depth = dep;
+            pos = -1;
+        }
+        void setC(float x, float y, float z, float r)
+        {
+            x_c = x;
+            y_c = y;
+            z_c = z;
+            radius = r;
+        }
+    };
+    struct ocTree
+    {
+        Node treeRoot;
+        ocTree(int n)
+        {
+            std::vector<int> se(n);
+            for (int i = 0; i < n; i++)
+                se[i] = i;
+            treeRoot = build(se.begin(), se.end(), 0);
+            treeRoot.pos = 0;
+        }
+        Node build(std::vector<int>::iterator beg, std::vector<int>::iterator end, int depth)
+        {
+            if (beg >= end)
+                return Node(depth);
+
+            float x_min = INFINITY, x_max = -x_min, y_min = INFINITY, y_max = -y_min, z_min = INFINITY, z_max = -z_min;
+            // 找到当前点集三个维度最大和最小值
+            for (std::vector<int>::iterator i = beg; i != end; i++)
+            {
+                float *point = &r_points[(*i)];
+                x_min = std::min(x_min, point[0]);
+                x_max = std::max(x_max, point[0]);
+                y_min = std::min(y_min, point[1]);
+                y_max = std::max(y_max, point[1]);
+                z_min = std::min(z_min, point[2]);
+                z_max = std::max(z_max, point[2]);
+            }
+            float r = std::max((x_max - x_min) / 2, std::max((y_max - y_min) / 2, (z_max - z_min) / 2));
+            Node root(depth);
+            root.setC((x_min + x_max) / 2, (y_max + y_min) / 2, (z_max + z_min) / 2, r);
+            root.subtree.resize(8, Node(root.depth + 1)); // 建立 8 课子树
+            for (std::vector<int>::iterator i = beg; i != end; i++)
+            {
+                float *point = &r_points[(*i)];
+                int pos = (point[0] > root.x_c) ? 0 : 1;
+                pos |= (point[1] > root.y_c) ? 0 : 2;
+                pos |= (point[2] > root.z_c) ? 0 : 4;
+                root.subtree[pos].incl.push_back((*i));
+            }
+            root.incl.clear();
+            for (int i = 0; i < 8; i++)
+            {
+                if (root.subtree[i].depth > 9 || root.subtree[i].incl.size() <= 1)
+                {
+                    root.subtree[i].pos = -1; // 划分为 叶子节点
+                }
+                else
+                {
+                    root.subtree[i] = build(root.subtree[i].incl.begin(), root.subtree[i].incl.end(), depth + 1);
+                    root.subtree[i].incl.clear();
+                    root.subtree[i].pos = i;
+                }
+            }
+            return root;
+        }
+        std::pair<float, int> ask(Node &root, float *s_point, std::pair<float, int> ans = {INFINITY, 0})
+        {
+            if (root.pos == -1 && root.incl.size() == 0)
+                return ans; // 空节点
+            std::pair<float, int> localAns = ans;
+            if (root.incl.size() == 0)
+            {
+                // 非叶子节点
+                std::pair<float, int> tmp(INFINITY, 0);
+                int pos = (s_point[0] > root.x_c) ? 0 : 1;
+                pos |= (s_point[1] > root.y_c) ? 0 : 2;
+                pos |= (s_point[2] > root.z_c) ? 0 : 4;
+                tmp = ask(root.subtree[pos], s_point, localAns);        // 按照树查询下去
+                localAns = tmp.first > localAns.first ? localAns : tmp; // 取小的一项
+                Node *rt = &(root.subtree[pos ^ 4]);
+                if (localAns.first > std::min(std::abs(s_point[2] - rt->z_c - rt->radius), std::abs(s_point[2] - rt->z_c + rt->radius)))
+                {
+                    tmp = ask(*rt, s_point, localAns);
+                    localAns = tmp.first > localAns.first ? localAns : tmp;
+                }
+                rt = &(root.subtree[pos ^ 2]);
+                if (localAns.first > std::min(std::abs(s_point[1] - rt->y_c - rt->radius), std::abs(s_point[1] - rt->y_c + rt->radius)))
+                {
+                    tmp = ask(*rt, s_point, localAns);
+                    localAns = tmp.first > localAns.first ? localAns : tmp;
+                }
+                rt = &(root.subtree[pos ^ 1]);
+                if (localAns.first > std::min(std::abs(s_point[0] - rt->x_c - rt->radius), std::abs(s_point[0] - rt->x_c + rt->radius)))
+                {
+                    tmp = ask(*rt, s_point, localAns);
+                    localAns = tmp.first > localAns.first ? localAns : tmp;
+                }
+            }
+            // 非空的叶子节点
+
+            for (std::vector<int>::iterator i = root.incl.begin(); i != root.incl.end(); i++)
+            {
+                float *r_point = &r_points[(*i)];
+                float dis = std::pow((r_point[0] - s_point[0]), 2);
+                dis += std::pow((r_point[1] - s_point[1]), 2);
+                dis += std::pow((r_point[2] - s_point[2]), 2);
+                if (dis < localAns.first)
+                {
+                    localAns.first = dis;
+                    localAns.second = *i;
+                }
+            }
+
+            return localAns;
+        }
+    };
+
+    extern void cudaCall(
+        int k,           // 空间维度
+        int m,           // 查询点数量
+        int n,           // 参考点数量
+        float *s_points, // 查询点集
+        float *r_points, // 参考点集
+        int **results    // 最近领点集
+    )
+    {
+        v11::k = k;
+        if (k != 3)
+            return v7::cudaCall(k,m,n,s_points,r_points,results);
+        v11::r_points = r_points;
+        v11::s_points = s_points;
+        v11::ocTree bt(n);
+        *results = (int *)malloc(sizeof(int) * m);
+		int thread = std::min(m , omp_get_max_threads());
+#pragma omp parallel for num_threads(thread)
+        for (int i = 0; i < m; i++)
+        {
+            (*results)[i] = bt.ask(bt.treeRoot, &s_points[i * k]).second;
+        }
+    }
+}
 struct WarmUP
 {
 	WarmUP(int k, int m, int n)
