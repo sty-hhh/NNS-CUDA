@@ -72,7 +72,7 @@ int main()
 {
     total = sizeof(samples) / (3 * sizeof(*samples)); // 样例个数
     // 运行全部的优化版本
-    for (int v = 0; v < 13; ++v)
+    for (int v = 0; v < 14; ++v)
     {
         switch (v)
         {
@@ -114,6 +114,9 @@ int main()
             break;
         case 12:
             func = &v12::cudaCall;
+            break;
+        case 13:
+            func = &v13::cudaCall;
             break;
         default:
             break;

@@ -1094,9 +1094,9 @@ namespace v10
 		v10::s_points = s_points;
 		v10::r_points = r_points;
 		long sta, end;
-		sta = clock();
+		sta = getTime();
 		KDTreeCPU kd(n);
-		end = clock();
+		end = getTime();
 		*results = (int *)malloc(sizeof(int) * m);
 		printf("---search on KD-Tree: --- ");
 		printf(" %10.3fms to build tree\n", (float)(end - sta) / 1e6);
@@ -1362,9 +1362,9 @@ namespace v11
 		v11::s_points = s_points;
 		v11::r_points = r_points;
 		long sta, end;
-		sta = clock();
+		sta = getTime();
 		KDTreeGPU kd(n, m);
-		end = clock();
+		end = getTime();
 		*results = (int *)malloc(sizeof(int) * m);
 		printf("---search on KD-Tree: --- ");
 		printf(" %10.3fms to build tree\n", (float)(end - sta) / 1e6);
@@ -1545,16 +1545,237 @@ namespace v12
 		v12::r_points = r_points;
 		v12::s_points = s_points;
 		long sta, end;
-		sta = clock();
+		sta = getTime();
 		v12::ocTree bt(n);
-		end = clock();
+		end = getTime();
 		printf("---search on ocTree: --- ");
-		printf(" %10.3fms to build tree\n", (double)(end - sta) / 1e6);
+		printf(" %10.3fms to build tree\n", (float)(end - sta) / 1e6);
 		*results = (int *)malloc(sizeof(int) * m);
 		int thread = std::min(m, omp_get_max_threads());
 #pragma omp parallel for num_threads(thread)
 		for (int i = 0; i < m; i++)
 			(*results)[i] = bt.ask(bt.treeRoot, &s_points[i * k]).second;
+	}
+}
+
+// GPU :ocTree
+
+namespace v13
+{
+	int k;
+	float *r_points, *s_points;
+	struct Node
+	{
+		thrust::host_vector<int> incl;	   // 包含哪些点集
+		float x_c, y_c, z_c;			   // 八角树划分中心
+		float radius;					   // 半径
+		int pos;						   // 标号 0 表示全部大于中心，1 表示 x小于，2 表示y小于，3表示xy小于，4表示z小于……-1表示没有
+		thrust::host_vector<Node> subtree; // 子树
+		int depth;						   // 表示深度
+		Node(float x, float y, float z, float r, int position = -1)
+		{
+			x_c = x;
+			y_c = y;
+			z_c = z;
+			radius = r;
+			pos = position;
+		}
+		Node &operator=(const Node &o)
+		{
+			x_c = o.x_c;
+			y_c = o.y_c;
+			z_c = o.z_c;
+			pos = o.pos;
+			incl = o.incl;
+			subtree = o.subtree;
+			return *this;
+		}
+		Node() { depth = 0; }
+		Node(int dep)
+		{
+			depth = dep;
+			pos = -1;
+		}
+		void setC(float x, float y, float z, float r)
+		{
+			x_c = x;
+			y_c = y;
+			z_c = z;
+			radius = r;
+		}
+	};
+	__device__ __host__ thrust::pair<float, int> ask_device(
+		Node root = Node(0),
+		float *s_point = nullptr,
+		thrust::pair<float, int> ans = {INFINITY, 0},
+		float *r_points = nullptr,
+		int rt = 1)
+	{
+		if (root.pos == -1 && root.incl.size() == 0)
+			return ans; // 空节点
+		thrust::pair<float, int> localAns = ans;
+		if (root.incl.size() == 0)
+		{
+			// 非叶子节点
+			thrust::pair<float, int> tmp(INFINITY, 0);
+			int pos = (s_point[0] > root.x_c) ? 0 : 1;
+			pos |= (s_point[1] > root.y_c) ? 0 : 2;
+			pos |= (s_point[2] > root.z_c) ? 0 : 4;
+			tmp = ask_device(root.subtree[pos], s_point, localAns); // 按照树查询下去
+			localAns = tmp.first > localAns.first ? localAns : tmp; // 取小的一项
+			Node *rt = &(root.subtree[pos ^ 4]);
+			if (localAns.first > thrust::min(std::abs(s_point[2] - rt->z_c - rt->radius), std::abs(s_point[2] - rt->z_c + rt->radius)))
+			{
+				tmp = ask_device(*rt, s_point, localAns);
+				localAns = tmp.first > localAns.first ? localAns : tmp;
+			}
+			rt = &(root.subtree[pos ^ 2]);
+			if (localAns.first > thrust::min(std::abs(s_point[1] - rt->y_c - rt->radius), std::abs(s_point[1] - rt->y_c + rt->radius)))
+			{
+				tmp = ask_device(*rt, s_point, localAns);
+				localAns = tmp.first > localAns.first ? localAns : tmp;
+			}
+			rt = &(root.subtree[pos ^ 1]);
+			if (localAns.first > thrust::min(std::abs(s_point[0] - rt->x_c - rt->radius), std::abs(s_point[0] - rt->x_c + rt->radius)))
+			{
+				tmp = ask_device(*rt, s_point, localAns);
+				localAns = tmp.first > localAns.first ? localAns : tmp;
+			}
+		}
+		// 非空的叶子节点
+
+		for (thrust::host_vector<int>::iterator i = root.incl.begin(); i != root.incl.end(); i++)
+		{
+			float *r_point = &r_points[(*i)];
+			float dis = std::pow((r_point[0] - s_point[0]), 2);
+			dis += std::pow((r_point[1] - s_point[1]), 2);
+			dis += std::pow((r_point[2] - s_point[2]), 2);
+			if (dis < localAns.first)
+			{
+				localAns.first = dis;
+				localAns.second = *i;
+			}
+		}
+
+		return localAns;
+	}
+
+	__global__ void range_ask_kernel(
+		Node root = Node(0),
+		float *s_point = nullptr,
+		float *r_points = nullptr,
+		int m = 0,
+		int *results = nullptr)
+	{
+		int global_id = blockIdx.x * blockDim.x + threadIdx.x;
+		if (global_id > m)
+		{
+			return;
+		}
+		// thrust::pair<float, int> ans = {INFINITY, 0};
+		// results[global_id] = ask_device(root, s_point, ans, r_points);
+	}
+
+	struct ocTreeGPU
+	{
+		Node treeRoot;
+		ocTreeGPU(int n)
+		{
+			thrust::host_vector<int> se(n);
+			for (int i = 0; i < n; i++)
+				se[i] = i;
+			treeRoot = build(se.begin(), se.end(), 0);
+			treeRoot.pos = 0;
+		}
+		Node build(thrust::host_vector<int>::iterator beg, thrust::host_vector<int>::iterator end, int depth)
+		{
+			if (beg >= end)
+				return Node(depth);
+
+			float x_min = INFINITY, x_max = -x_min, y_min = INFINITY, y_max = -y_min, z_min = INFINITY, z_max = -z_min;
+			// 找到当前点集三个维度最大和最小值
+			for (thrust::host_vector<int>::iterator i = beg; i != end; i++)
+			{
+				float *point = &r_points[(*i)];
+				x_min = std::min(x_min, point[0]);
+				x_max = std::max(x_max, point[0]);
+				y_min = std::min(y_min, point[1]);
+				y_max = std::max(y_max, point[1]);
+				z_min = std::min(z_min, point[2]);
+				z_max = std::max(z_max, point[2]);
+			}
+			float r = thrust::max((x_max - x_min) / 2, thrust::max((y_max - y_min) / 2, (z_max - z_min) / 2));
+			Node root(depth);
+			root.setC((x_min + x_max) / 2, (y_max + y_min) / 2, (z_max + z_min) / 2, r);
+			root.subtree.resize(8, Node(root.depth + 1)); // 建立 8 课子树
+			for (thrust::host_vector<int>::iterator i = beg; i != end; i++)
+			{
+				float *point = &r_points[(*i)];
+				int pos = (point[0] > root.x_c) ? 0 : 1;
+				pos |= (point[1] > root.y_c) ? 0 : 2;
+				pos |= (point[2] > root.z_c) ? 0 : 4;
+				root.subtree[pos].incl.push_back((*i));
+			}
+			root.incl.clear();
+			for (int i = 0; i < 8; i++)
+			{
+				if (root.subtree[i].depth > 9 || root.subtree[i].incl.size() <= 1)
+				{
+					root.subtree[i].pos = -1; // 划分为 叶子节点
+				}
+				else
+				{
+					root.subtree[i] = build(root.subtree[i].incl.begin(), root.subtree[i].incl.end(), depth + 1);
+					root.subtree[i].incl.clear();
+					root.subtree[i].pos = i;
+				}
+			}
+			return root;
+		}
+		void range_ask(int m, int *results)
+		{
+			thrust::device_vector<int> result(m);
+			int minGridSize, blockSize;
+			CHECK(cudaOccupancyMaxPotentialBlockSize(
+				&minGridSize,
+				&blockSize,
+				range_ask_kernel));
+			range_ask_kernel<<<divup(m, blockSize), blockSize>>>(
+				treeRoot,
+				s_points,
+				r_points,
+				m,
+				thrust::raw_pointer_cast(result.data()));
+			thrust::copy(result.begin(), result.end(), results);
+		}
+	};
+
+	extern void cudaCall(
+		int k,			 // 空间维度
+		int m,			 // 查询点数量
+		int n,			 // 参考点数量
+		float *s_points, // 查询点集
+		float *r_points, // 参考点集
+		int **results	 // 最近领点集
+	)
+	{
+		v13::k = k;
+
+		if (k != 3)
+		{
+			return v0::cudaCall(k, m, n, s_points, r_points, results);
+		}
+		v13::r_points = r_points;
+		v13::s_points = s_points;
+		long sta, end;
+		sta = getTime();
+		v13::ocTreeGPU bt(n);
+		end = getTime();
+		printf("---search on ocTree: --- ");
+		printf(" %10.3fms to build tree\n", (float)(end - sta) / 1e6);
+		*results = (int *)malloc(sizeof(int) * m);
+
+		bt.range_ask(m, *results);
 	}
 }
 
