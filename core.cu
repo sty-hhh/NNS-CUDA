@@ -1093,9 +1093,15 @@ namespace v10
 		v10::k = k;
 		v10::s_points = s_points;
 		v10::r_points = r_points;
+		long sta, end;
+		sta = clock();
 		KDTreeCPU kd(n);
+		end = clock();
 		*results = (int *)malloc(sizeof(int) * m);
-		printf("---search on KD-tree: ---") for (int i = 0; i < m; ++i)(*results)[i] = kd.ask(i).second;
+		printf("---search on KD-Tree: --- ");
+		printf(" %10.3fms to build tree\n", (float)(end - sta) / 1e6);
+		for (int i = 0; i < m; ++i)
+			(*results)[i] = kd.ask(i).second;
 	}
 }
 // GPU :KDTree
@@ -1355,14 +1361,16 @@ namespace v11
 		v11::k = k;
 		v11::s_points = s_points;
 		v11::r_points = r_points;
+		long sta, end;
+		sta = clock();
 		KDTreeGPU kd(n, m);
+		end = clock();
 		*results = (int *)malloc(sizeof(int) * m);
-		printf("---search on KD-Tree: ");
-		{
-			// WuKTimer timer;
-			kd.range_ask(m, *results);
-		}
-		printf("---\n");
+		printf("---search on KD-Tree: --- ");
+		printf(" %10.3fms to build tree\n", (float)(end - sta) / 1e6);
+
+		// wwz timer;
+		kd.range_ask(m, *results);
 	}
 } // namespace v10
 
@@ -1529,22 +1537,26 @@ namespace v12
 	)
 	{
 		v12::k = k;
+
 		if (k != 3)
-			return v7::cudaCall(k, m, n, s_points, r_points, results);
+		{
+			return v0::cudaCall(k, m, n, s_points, r_points, results);
+		}
 		v12::r_points = r_points;
 		v12::s_points = s_points;
+		long sta, end;
+		sta = clock();
 		v12::ocTree bt(n);
+		end = clock();
+		printf("---search on ocTree: --- ");
+		printf(" %10.3fms to build tree\n", (double)(end - sta) / 1e6);
 		*results = (int *)malloc(sizeof(int) * m);
 		int thread = std::min(m, omp_get_max_threads());
-		printf("---search on ocTree: ---\n");
 #pragma omp parallel for num_threads(thread)
 		for (int i = 0; i < m; i++)
-		{
 			(*results)[i] = bt.ask(bt.treeRoot, &s_points[i * k]).second;
-		}
 	}
 }
-
 
 struct WarmUP
 {
