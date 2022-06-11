@@ -28,10 +28,20 @@ void getSample(int k, int m, int n, float **s_points, float **r_points)
 
 // 样例设置
 int samples[] = {
-    3, 1, 16777216,
-    16, 1, 16777216,
-    3, 1024, 1048576,
-    16, 1024, 1048576};
+    3,  1,      1024,
+    3,  1,      65536,
+    16, 1,      65536,
+
+    3,  1024,   1024,
+    3,  1024,   65536,
+    16, 1024,   65536,
+
+    // 3,  1,      16777216,
+    // 16, 1,      16777216,
+
+    3,  1024,   1048576,
+    16, 1024,   1048576
+};
 
 int total = 0;   // 样例个数
 int seed = 1000; // 随机种子
@@ -52,7 +62,7 @@ void test(int v)
         st = getTime();
         (*func)(k, m, n, s_points, r_points, &results);
         et = getTime();
-        printf("CudaCall %d, %2d, %4d, %5d, %10.3fms\n", v, k, m, n, (et - st) / 1e6);
+        printf("CudaCall %d, %2d, %4d, %10d, %10.3fms\n", v, k, m, n, (et - st) / 1e6);
         free(s_points);
         free(r_points);
     }
@@ -63,7 +73,7 @@ int main()
 {
     total = sizeof(samples) / (3 * sizeof(*samples)); // 样例个数
     // 运行全部的优化版本
-    for (int v = 0; v < 12; ++v)
+    for (int v = 0; v < 13; ++v)
     {
         switch (v)
         {
@@ -97,16 +107,19 @@ int main()
         case 9:
             func = &v9::cudaCall;
             break;
-            // case 10:
-            //     func = & v10::cudaCall;
-            //     break;
+        case 10:
+            func = &v10::cudaCall;
+            break;
         case 11:
             func = &v11::cudaCall;
+            break;
+        case 12:
+            func = &v12::cudaCall;
             break;
         default:
             break;
         }
-        printf("\nRunning CUDACALL%d...\n", v);
+        printf("\nRunning CUDACALL %d...\n", v);
         test(v);
     }
 }
