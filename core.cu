@@ -10,6 +10,16 @@
 // CPU 串行版本
 namespace v0
 {
+	/**
+	 * @brief CPU 串行版本
+	 * 
+	 * @param k 空间维度
+	 * @param m 查询点数量
+	 * @param n 参考点数量
+	 * @param s_points 查询点集
+	 * @param r_points 参考点集
+	 * @param results 存放结果
+	 */
 	extern void cudaCall(
 		int k,			 // 空间维度
 		int m,			 // 查询点数量
@@ -66,6 +76,14 @@ namespace v1
 			dis[idn + idm * n] = tempSum; // 计算 m*n 的距离矩阵
 		}
 	}
+	/**
+	 * @brief 共享内存树形归约
+	 * 
+	 * @param m 查询点数量
+	 * @param n 参考点数量
+	 * @param dis 距离向量
+	 * @param result 结果
+	 */
 	template <int BLOCK_DIM>
 	static __global__ void get_min_kernel( // 共享内存树形归约
 		const int m,
@@ -183,6 +201,17 @@ namespace v2
 // GPU：计算距离并同时归约
 namespace v3
 {
+	/**
+	 * @brief cuda 计算距离同时归约核函数
+	 * 
+	 * @tparam BLOCK_DIM 
+	 * @param k 
+	 * @param m 
+	 * @param n 
+	 * @param s_points 
+	 * @param r_points 
+	 * @param result 
+	 */
 	template <int BLOCK_DIM>
 	static __global__ void cudaCallKernel(
 		const int k,
@@ -253,7 +282,15 @@ namespace v3
 // GPU：AoS2SoA
 namespace v4
 {
-	static __global__ void mat_inv_kernel( // 转置矩阵
+	/**
+	 * @brief 转置矩阵 的 核函数
+	 * 
+	 * @param k 矩阵长
+	 * @param n 矩阵宽
+	 * @param input 输入矩阵的指针
+	 * @param output 输出矩阵的指针
+	 */
+	static __global__ void mat_inv_kernel(
 		const int k,
 		const int n,
 		const float *__restrict__ input,
@@ -1035,11 +1072,23 @@ namespace v10
 	struct KDTreeCPU
 	{
 		thrust::host_vector<int> p, dim;
+		/**
+		 * @brief Construct a new KDTreeCPU object
+		 * 
+		 * @param n 给定参考点数量
+		 */
 		KDTreeCPU(int n) : p(n << 2, -1), dim(p)
 		{
 			thrust::host_vector<int> se(thrust::counting_iterator<int>(0), thrust::counting_iterator<int>(n));
 			build(se.begin(), se.end());
 		}
+		/**
+		 * @brief 递归调用，建立 kd-tree 子树
+		 * 
+		 * @param beg 子树囊括的顶点集合开始处
+		 * @param end 子树囊括的顶点集合结束处
+		 * @param rt 树根所在维度
+		 */
 		void build(thrust::host_vector<int>::iterator beg, thrust::host_vector<int>::iterator end, int rt = 1)
 		{
 			if (beg >= end)
@@ -1063,6 +1112,14 @@ namespace v10
 			build(beg, mid, rt << 1);
 			build(++mid, end, rt << 1 | 1);
 		}
+		/**
+		 * @brief 查询函数
+		 * 
+		 * @param x 给定查询点位置
+		 * @param ans 当前最优解
+		 * @param rt 树根所在维度
+		 * @return thrust::pair<float, int> 
+		 */
 		thrust::pair<float, int> ask(int x, thrust::pair<float, int> ans = {INFINITY, 0}, int rt = 1)
 		{
 			if (dim[rt] < 0)
@@ -1232,6 +1289,19 @@ namespace v10
 // GPU KD-Tree
 namespace v11
 {
+	/**
+	 * @brief GPU 上查询函数
+	 * 
+	 * @param s_d 查询点集合
+	 * @param r_d 参考点集合
+	 * @param dim 树根维度集合
+	 * @param p 树根参考点集合
+	 * @param k 维度
+	 * @param x 查询点下表
+	 * @param ans 当前最优解
+	 * @param rt 当前子树位置
+	 * @return thrust::pair<float, int>
+	 */
 	__device__ thrust::pair<float, int> ask_device(
 		float *s_d,
 		float *r_d,
@@ -1327,6 +1397,12 @@ namespace v11
 			build(beg, mid, rt << 1);
 			build(++mid, end, rt << 1 | 1);
 		}
+		/**
+		 * @brief 对 m 个查询点的求解最近邻
+		 * 
+		 * @param m 查询点数量
+		 * @param results 结果存放
+		 */
 		void range_ask(int m, int *results)
 		{
 			thrust::device_vector<int> results_d(m);
@@ -1411,6 +1487,14 @@ namespace v12
 			depth = dep;
 			pos = -1;
 		}
+		/**
+		 * @brief 设定树根中心所在位置
+		 * 
+		 * @param x x 维度的位置
+		 * @param y y 维度的位置
+		 * @param z z 维度的位置
+		 * @param r 方块最小边长
+		 */
 		void setC(float x, float y, float z, float r)
 		{
 			x_c = x;
@@ -1430,6 +1514,14 @@ namespace v12
 			treeRoot = build(se.begin(), se.end(), 0);
 			treeRoot.pos = 0;
 		}
+		/**
+		 * @brief 建树
+		 * 
+		 * @param beg 子树包含的数据起始处
+		 * @param end 子树包含的数据结束处
+		 * @param depth 当前子树深度
+		 * @return Node 树根结构体
+		 */
 		Node build(std::vector<int>::iterator beg, std::vector<int>::iterator end, int depth)
 		{
 			if (beg >= end)
@@ -1475,6 +1567,14 @@ namespace v12
 			}
 			return root;
 		}
+		/**
+		 * @brief 查询函数
+		 * 
+		 * @param root 当前树根
+		 * @param s_point 查询点集合
+		 * @param ans 当前最优解
+		 * @return std::pair<float, int> 
+		 */
 		std::pair<float, int> ask(Node &root, float *s_point, std::pair<float, int> ans = {INFINITY, 0})
 		{
 			if (root.pos == -1 && root.incl.size() == 0)
@@ -1604,6 +1704,16 @@ namespace v13
 			radius = r;
 		}
 	};
+	/**
+	 * @brief GPU 上查询函数
+	 * 
+	 * @param root 当前树根
+	 * @param s_point 查询点集合
+	 * @param ans 当前最优解
+	 * @param r_points 参考点集合
+	 * @param rt 树根的在集合中位置
+	 * @return thrust::pair<float, int>
+	 */
 	__device__ __host__ thrust::pair<float, int> ask_device(
 		Node root = Node(0),
 		float *s_point = nullptr,
@@ -1659,7 +1769,15 @@ namespace v13
 
 		return localAns;
 	}
-
+	/**
+	 * @brief cuda 查询核函数
+	 * 
+	 * @param root 当前树根
+	 * @param s_point 查询点
+	 * @param r_points 参考点集合
+	 * @param m 查询点数量
+	 * @param results 结果存放
+	 */
 	__global__ void range_ask_kernel(
 		Node root = Node(0),
 		float *s_point = nullptr,
@@ -1781,6 +1899,13 @@ namespace v13
 
 struct WarmUP
 {
+	/**
+	 * @brief GPU 预热
+	 * 
+	 * @param k 无实际意义
+	 * @param m 无实际意义
+	 * @param n 无实际意义
+	 */
 	WarmUP(int k, int m, int n)
 	{
 		float *s_points = (float *)malloc(sizeof(float) * k * m);

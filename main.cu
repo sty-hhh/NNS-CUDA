@@ -12,7 +12,15 @@ float getRand()
     return rand() / double(RAND_MAX);
 }
 
-// 生成随机样例
+/**
+ * @brief Get the Sample object
+ * 
+ * @param k int 样例维度
+ * @param m int 测试点数量
+ * @param n int 参考点数量
+ * @param s_points float** 测试点数据指针
+ * @param r_points float** 参考点数据指针
+ */
 void getSample(int k, int m, int n, float **s_points, float **r_points)
 {
     float *tmp;
@@ -46,7 +54,11 @@ int total = 0;   // 样例个数
 int seed = 1000; // 随机种子
 long st, et;     // 开始和结束的时间
 
-// 样例测试
+/**
+ * @brief 调用对应的核函数
+ * 
+ * @param v 指定 version 版本
+ */
 void test(int v)
 {
     srand(seed);
